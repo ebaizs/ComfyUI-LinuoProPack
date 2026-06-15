@@ -17,15 +17,12 @@ Linuo风格文本生成器 (输出完整提示词)
 <img width="846" height="504" alt="image" src="https://github.com/user-attachments/assets/55962cfe-968a-4306-ac7f-8bae15b3eec4" />
 
 Linuo风格条件混合器 (线性插值/加权拼接)
-
 <img width="374" height="32771" alt="image" src="https://github.com/user-attachments/assets/3f63781d-be81-4e5b-a64b-7ffbdddc2543" />
 
 Linuo模型任意选择器 (3输入)，Linuo条件任意选择器 (3输入)，Linuo通用任意选择器 (4输入)
-
 <img width="891" height="510" alt="image" src="https://github.com/user-attachments/assets/f6f4aa66-9e0c-4635-8120-f5a43ebec6db" />
 
 Linuo图生图参数、Linuo文生图参数、Linuo控制发散混合出图设置
-
 <img width="937" height="558" alt="image" src="https://github.com/user-attachments/assets/fbe19854-d3ee-412a-b2e0-b204f96bf66a" />
 
 **问：如何安装该插件？**  
