@@ -5,24 +5,32 @@ Linuo数值滑块 (0~1, 0~10, 0~100, 自定义范围)
 <img width="960" height="471" alt="1" src="https://github.com/user-attachments/assets/29575b3d-1798-4783-bad0-ef540d55f28b" />
 
 Linuo空Latent预设 (4:3/16:9 多种长边尺寸)
+
 <img width="664" height="285" alt="image" src="https://github.com/user-attachments/assets/2b79da52-0df5-49e3-8062-d2726316757c" />
 
 Linuo图像+遮罩按长边缩放 (可填充遮罩漏洞)
+
 <img width="1057" height="563" alt="image" src="https://github.com/user-attachments/assets/77fd48cd-8471-4dea-aa7c-4c286658b3f2" />
 
 Linuo出图参数预设 (步数/CFG)
+
 <img width="546" height="234" alt="image" src="https://github.com/user-attachments/assets/08b9483e-ace6-4cf4-b198-4884aaecadd3" />
 
 Linuo风格文本生成器 (输出完整提示词)
+
 <img width="846" height="504" alt="image" src="https://github.com/user-attachments/assets/55962cfe-968a-4306-ac7f-8bae15b3eec4" />
 
 Linuo风格条件混合器 (线性插值/加权拼接)
-<img width="374" height="32771" alt="image" src="https://github.com/user-attachments/assets/3f63781d-be81-4e5b-a64b-7ffbdddc2543" />
+
+<img width="926" height="644" alt="image" src="https://github.com/user-attachments/assets/77a9f6ab-62be-411a-8093-af7f6955045d" />
+
 
 Linuo模型任意选择器 (3输入)，Linuo条件任意选择器 (3输入)，Linuo通用任意选择器 (4输入)
+
 <img width="891" height="510" alt="image" src="https://github.com/user-attachments/assets/f6f4aa66-9e0c-4635-8120-f5a43ebec6db" />
 
 Linuo图生图参数、Linuo文生图参数、Linuo控制发散混合出图设置
+
 <img width="937" height="558" alt="image" src="https://github.com/user-attachments/assets/fbe19854-d3ee-412a-b2e0-b204f96bf66a" />
 
 **问：如何安装该插件？**  
