@@ -169,8 +169,9 @@ class ImageMaskScaleByLongSide:
                 mask_resized = mask_binary
         return (img_resized, mask_resized)
 
-# ================= 4. 出图参数预设节点 =================
+# ================= 4. 出图参数预设节点（移除"自定义"）=================
 class SamplingParamsPreset:
+    # 映射表仍保留，供前端脚本使用（无需删除）
     PRESET_MAP = {
         "4步加速": {"steps": 4, "cfg": 1.0},
         "8步加速": {"steps": 8, "cfg": 1.0},
@@ -183,7 +184,7 @@ class SamplingParamsPreset:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "预设": (["4步加速", "8步加速", "flux中质量", "flux高质量", "qwen中质量", "qwen高质量", "自定义"], {"default": "flux中质量"}),
+                "预设": (["4步加速", "8步加速", "flux中质量", "flux高质量", "qwen中质量", "qwen高质量"], {"default": "flux中质量"}),
                 "自定义步数": ("INT", {"default": 8, "min": 1, "max": 100, "step": 1}),
                 "自定义CFG": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 30.0, "step": 0.1}),
             }
@@ -193,10 +194,9 @@ class SamplingParamsPreset:
     FUNCTION = "get_params"
     CATEGORY = "Linuo/采样参数"
     def get_params(self, 预设, 自定义步数, 自定义CFG):
-        if 预设 == "自定义": return (自定义步数, 自定义CFG)
-        else: return (self.PRESET_MAP[预设]["steps"], self.PRESET_MAP[预设]["cfg"])
-
-# ================= 5. 装饰风格词库（从工作流中提取）=================
+        # 直接返回输入框中的值
+        return (自定义步数, 自定义CFG)
+# ================= 5. 装饰风格词库 =================
 DECOR_STYLES = {
     "现代简约": "现代简约：以黑白灰为主色调，采用几何造型与极简线条设计。家具选用金属玻璃材质，灯具采用无主灯设计，配饰注重隐藏式收纳与智能家居。墙面使用纯色乳胶漆，地面铺装灰色地砖或深色木地板，整体呈现理性整洁、具有科技感的现代空间。",
     "垞寂风": "侘寂风格，整体以低饱和度灰调为主，墙面采用微水泥或哑光艺术漆，保留自然斑驳肌理，地面铺设浅灰或原木色地板。家具选用未经过多修饰的原木或深褐色胡桃木材质，造型简洁克制，搭配亚麻窗帘、藤编座椅等自然元素。空间注重留白与不对称布局，通过少量手工陶器、枯枝、棉麻织物或旧石器装饰体现岁月痕迹。灯光采用无主灯设计，以纸质暖光灯、隐藏式灯带营造柔和光影，突出质朴寂静的禅意氛围",
@@ -259,7 +259,7 @@ class FenggehunheFixed:
                 "风格1自定义词": ("STRING", {"default": "", "placeholder": "自定义风格词（仅当上方选择'自定义'时生效）"}),
                 "风格2预设": (style_list, {"default": "北欧风格"}),
                 "风格2自定义词": ("STRING", {"default": "", "placeholder": "自定义风格词（仅当上方选择'自定义'时生效）"}),
-                "混合方式": (["加权拼合", "线性插值"], {"default": "加权拼合"}),
+                "混合方式": (["线性插值", "加权拼接"], {"default": "线性插值"}),
                 "风格1强度": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "输出模式": (["混合条件", "风格1条件", "风格2条件"], {"default": "混合条件"}),
             }
@@ -312,7 +312,7 @@ class FenggehunheFixed:
                     blended_dict["pooled_output"] = d1["pooled_output"]
                 elif "pooled_output" in d2:
                     blended_dict["pooled_output"] = d2["pooled_output"]
-            else:  # 加权拼合
+            else:  # 加权拼接
                 t1_scaled = t1 * strength
                 t2_scaled = t2 * (1.0 - strength)
                 blended_t = torch.cat([t1_scaled, t2_scaled], dim=1)
@@ -342,7 +342,8 @@ class FenggehunheFixed:
         else:
             mixed_cond = self.blend_conditionings(cond1, cond2, 风格1强度, 混合方式)
             return (mixed_cond,)
-# ================= 模型任意选择器（3输入可选）=================
+
+# ================= 8. 模型任意选择器（3输入可选）=================
 class ModelSelector:
     @classmethod
     def INPUT_TYPES(cls):
@@ -371,7 +372,7 @@ class ModelSelector:
         else:
             return (标准模型,)
 
-# ================= 条件任意选择器（3输入可选）=================
+# ================= 9. 条件任意选择器（3输入可选）=================
 class ConditioningSelector:
     @classmethod
     def INPUT_TYPES(cls):
@@ -400,7 +401,7 @@ class ConditioningSelector:
         else:
             return (条件2,)
 
-# ================= 通用任意选择器（4输入可选）=================
+# ================= 10. 通用任意选择器（4输入可选）=================
 class GenericSelector4:
     @classmethod
     def INPUT_TYPES(cls):
@@ -431,7 +432,8 @@ class GenericSelector4:
             return (输入3,)
         else:
             return (输入4,)
-# ================= 11. Linuo图生图参数 =================
+
+# ================= 11. Linuo图生图参数（移除"自定义"预设）=================
 class LinuoImg2ImgParams:
     @classmethod
     def INPUT_TYPES(cls):
@@ -440,7 +442,7 @@ class LinuoImg2ImgParams:
                 "图像": ("IMAGE",),
                 "vae": ("VAE",),
                 "长边数值": ("INT", {"default": 1024, "min": 64, "max": 4096, "step": 8}),
-                "采样预设": (["4步加速", "8步加速", "flux中质量", "flux高质量", "qwen中质量", "qwen高质量", "自定义"], {"default": "flux中质量"}),
+                "采样预设": (["4步加速", "8步加速", "flux中质量", "flux高质量", "qwen中质量", "qwen高质量"], {"default": "flux中质量"}),
                 "自定义步数": ("INT", {"default": 20, "min": 1, "max": 100, "step": 1}),
                 "自定义CFG": ("FLOAT", {"default": 3.5, "min": 0.0, "max": 30.0, "step": 0.1}),
             }
@@ -451,6 +453,7 @@ class LinuoImg2ImgParams:
     CATEGORY = "Linuo/参数整合"
 
     def process(self, 图像, vae, 长边数值, 采样预设, 自定义步数, 自定义CFG):
+        # 缩放图像
         original_h, original_w = 图像.shape[1], 图像.shape[2]
         if original_h >= original_w:
             new_h = 长边数值
@@ -464,21 +467,17 @@ class LinuoImg2ImgParams:
         img_resized = F.interpolate(img, size=(new_h, new_w), mode="bilinear", antialias=True)
         img_resized = img_resized.permute(0, 2, 3, 1)
         latent = vae.encode(img_resized[:, :, :, :3])
-        if 采样预设 == "自定义":
-            steps = 自定义步数
-            cfg = 自定义CFG
-        else:
-            steps = SamplingParamsPreset.PRESET_MAP[采样预设]["steps"]
-            cfg = SamplingParamsPreset.PRESET_MAP[采样预设]["cfg"]
+        # 直接使用输入框的值
+        steps = 自定义步数
+        cfg = 自定义CFG
         return ({"samples": latent}, steps, cfg, img_resized)
-
-# ================= 12. Linuo文生图参数 =================
+# ================= 12. Linuo文生图参数（移除"自定义"预设）=================
 class LinuoTxt2ImgParams:
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "采样预设": (["4步加速", "8步加速", "flux中质量", "flux高质量", "qwen中质量", "qwen高质量", "自定义"], {"default": "flux中质量"}),
+                "采样预设": (["4步加速", "8步加速", "flux中质量", "flux高质量", "qwen中质量", "qwen高质量"], {"default": "flux中质量"}),
                 "自定义步数": ("INT", {"default": 20, "min": 1, "max": 100, "step": 1}),
                 "自定义CFG": ("FLOAT", {"default": 3.5, "min": 0.0, "max": 30.0, "step": 0.1}),
                 "尺寸预设": (["4:3_1024", "16:9_1024", "4:3_1600", "16:9_1600", "4:3_2024", "16:9_2024", "4:3_2500", "16:9_2500", "自定义"], {"default": "16:9_1024"}),
@@ -494,6 +493,7 @@ class LinuoTxt2ImgParams:
     CATEGORY = "Linuo/参数整合"
 
     def process(self, 采样预设, 自定义步数, 自定义CFG, 尺寸预设, 横竖屏切换, 自定义宽度, 自定义高度, 批次数量):
+        # 生成 Latent（与原来相同）
         if 尺寸预设 == "4:3_1024":
             long_side, ratio = 1024, 4/3
         elif 尺寸预设 == "16:9_1024":
@@ -516,12 +516,8 @@ class LinuoTxt2ImgParams:
             if 横竖屏切换 == "竖屏":
                 width, height = height, width
             latent = torch.zeros([批次数量, 4, height // 8, width // 8])
-            if 采样预设 == "自定义":
-                steps = 自定义步数
-                cfg = 自定义CFG
-            else:
-                steps = SamplingParamsPreset.PRESET_MAP[采样预设]["steps"]
-                cfg = SamplingParamsPreset.PRESET_MAP[采样预设]["cfg"]
+            steps = 自定义步数
+            cfg = 自定义CFG
             return ({"samples": latent}, steps, cfg)
         if 横竖屏切换 == "横屏":
             width = long_side
@@ -532,14 +528,9 @@ class LinuoTxt2ImgParams:
         width = (width // 8) * 8
         height = (height // 8) * 8
         latent = torch.zeros([批次数量, 4, height // 8, width // 8])
-        if 采样预设 == "自定义":
-            steps = 自定义步数
-            cfg = 自定义CFG
-        else:
-            steps = SamplingParamsPreset.PRESET_MAP[采样预设]["steps"]
-            cfg = SamplingParamsPreset.PRESET_MAP[采样预设]["cfg"]
+        steps = 自定义步数
+        cfg = 自定义CFG
         return ({"samples": latent}, steps, cfg)
-
 # ================= 13. Linuo控制发散混合出图设置 =================
 class LinuoControlFusion:
     @classmethod
@@ -656,9 +647,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SamplingParamsPreset": "Linuo出图参数预设 (步数/CFG)",
     "StyleTextGenerator": "Linuo风格文本生成器 (仅文本)",
     "风格条件混合器 (修复版)": "Linuo风格条件混合器 (增强版)",
-    "ModelSelector": "Linuo模型任意选择器 (3输入)",
-    "ConditioningSelector": "Linuo条件任意选择器 (3输入)",
-    "GenericSelector4": "Linuo通用任意选择器 (4输入)",
+    "ModelSelector": "Linuo模型任意选择器 (3输入可选)",
+    "ConditioningSelector": "Linuo条件任意选择器 (3输入可选)",
+    "GenericSelector4": "Linuo通用任意选择器 (4输入可选)",
     "Linuo图生图参数": "Linuo图生图参数 (整合缩放+编码+参数)",
     "Linuo文生图参数": "Linuo文生图参数 (整合尺寸+参数)",
     "Linuo控制发散混合出图设置": "Linuo控制发散混合出图设置 (含输出模式选择)",
