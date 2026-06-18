@@ -342,24 +342,28 @@ class FenggehunheFixed:
         else:
             mixed_cond = self.blend_conditionings(cond1, cond2, 风格1强度, 混合方式)
             return (mixed_cond,)
-
-# ================= 8. 模型任意选择器（3输入）=================
+# ================= 模型任意选择器（3输入可选）=================
 class ModelSelector:
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
+                "选择输出模型": (["加速模型_nunchaku", "加速模型_GGUF", "标准模型"], {"default": "加速模型_nunchaku"}),
+                "激活": ("BOOLEAN", {"default": True, "label_on": "启用", "label_off": "禁用"}),
+            },
+            "optional": {
                 "加速模型_nunchaku": ("MODEL",),
                 "加速模型_GGUF": ("MODEL",),
                 "标准模型": ("MODEL",),
-                "选择输出模型": (["加速模型_nunchaku", "加速模型_GGUF", "标准模型"], {"default": "加速模型_nunchaku"}),
             }
         }
     RETURN_TYPES = ("MODEL",)
     FUNCTION = "select"
     CATEGORY = "Linuo/任意选择器"
 
-    def select(self, 加速模型_nunchaku, 加速模型_GGUF, 标准模型, 选择输出模型):
+    def select(self, 选择输出模型, 激活, 加速模型_nunchaku=None, 加速模型_GGUF=None, 标准模型=None):
+        if not 激活:
+            return (None,)
         if 选择输出模型 == "加速模型_nunchaku":
             return (加速模型_nunchaku,)
         elif 选择输出模型 == "加速模型_GGUF":
@@ -367,23 +371,28 @@ class ModelSelector:
         else:
             return (标准模型,)
 
-# ================= 9. 条件任意选择器（3输入）=================
+# ================= 条件任意选择器（3输入可选）=================
 class ConditioningSelector:
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
+                "选择输出条件": (["混合条件", "条件1", "条件2"], {"default": "混合条件"}),
+                "激活": ("BOOLEAN", {"default": True, "label_on": "启用", "label_off": "禁用"}),
+            },
+            "optional": {
                 "混合条件": ("CONDITIONING",),
                 "条件1": ("CONDITIONING",),
                 "条件2": ("CONDITIONING",),
-                "选择输出条件": (["混合条件", "条件1", "条件2"], {"default": "混合条件"}),
             }
         }
     RETURN_TYPES = ("CONDITIONING",)
     FUNCTION = "select"
     CATEGORY = "Linuo/任意选择器"
 
-    def select(self, 混合条件, 条件1, 条件2, 选择输出条件):
+    def select(self, 选择输出条件, 激活, 混合条件=None, 条件1=None, 条件2=None):
+        if not 激活:
+            return ([],)
         if 选择输出条件 == "混合条件":
             return (混合条件,)
         elif 选择输出条件 == "条件1":
@@ -391,24 +400,29 @@ class ConditioningSelector:
         else:
             return (条件2,)
 
-# ================= 10. 通用任意选择器（4输入）=================
+# ================= 通用任意选择器（4输入可选）=================
 class GenericSelector4:
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
+                "选择输出": (["输入1", "输入2", "输入3", "输入4"], {"default": "输入1"}),
+                "激活": ("BOOLEAN", {"default": True, "label_on": "启用", "label_off": "禁用"}),
+            },
+            "optional": {
                 "输入1": ("*",),
                 "输入2": ("*",),
                 "输入3": ("*",),
                 "输入4": ("*",),
-                "选择输出": (["输入1", "输入2", "输入3", "输入4"], {"default": "输入1"}),
             }
         }
     RETURN_TYPES = ("*",)
     FUNCTION = "select"
     CATEGORY = "Linuo/任意选择器"
 
-    def select(self, 输入1, 输入2, 输入3, 输入4, 选择输出):
+    def select(self, 选择输出, 激活, 输入1=None, 输入2=None, 输入3=None, 输入4=None):
+        if not 激活:
+            return (None,)
         if 选择输出 == "输入1":
             return (输入1,)
         elif 选择输出 == "输入2":
@@ -417,7 +431,6 @@ class GenericSelector4:
             return (输入3,)
         else:
             return (输入4,)
-
 # ================= 11. Linuo图生图参数 =================
 class LinuoImg2ImgParams:
     @classmethod
