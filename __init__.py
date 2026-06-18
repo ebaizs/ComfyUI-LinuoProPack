@@ -218,14 +218,14 @@ DECOR_STYLES = {
 class StyleTextGenerator:
     @classmethod
     def INPUT_TYPES(cls):
-        style_list = list(DECOR_STYLES.keys()) + ["自定义"]
+        style_list = list(DECOR_STYLES.keys())  # 不再包含 "自定义"
         return {
             "required": {
                 "通用提示词": ("STRING", {"multiline": True, "default": "", "placeholder": "输入通用提示词"}),
                 "风格1预设": (style_list, {"default": "现代简约"}),
-                "风格1自定义词": ("STRING", {"default": "", "placeholder": "自定义风格词（仅当上方选择'自定义'时生效）"}),
+                "风格1自定义词": ("STRING", {"default": "", "placeholder": "自定义风格词（非空时自动覆盖预设）"}),
                 "风格2预设": (style_list, {"default": "北欧风格"}),
-                "风格2自定义词": ("STRING", {"default": "", "placeholder": "自定义风格词（仅当上方选择'自定义'时生效）"}),
+                "风格2自定义词": ("STRING", {"default": "", "placeholder": "自定义风格词（非空时自动覆盖预设）"}),
             }
         }
     RETURN_TYPES = ("STRING", "STRING")
@@ -234,7 +234,8 @@ class StyleTextGenerator:
     CATEGORY = "Linuo/提示词混搭"
 
     def get_style_text(self, preset, custom_text):
-        if preset == "自定义":
+        # 优先使用自定义词（非空），否则使用预设描述
+        if custom_text.strip():
             return custom_text.strip()
         else:
             return DECOR_STYLES.get(preset, "")
@@ -245,21 +246,19 @@ class StyleTextGenerator:
         prompt1 = f"{通用提示词}, {style1_text}" if style1_text else 通用提示词
         prompt2 = f"{通用提示词}, {style2_text}" if style2_text else 通用提示词
         return (prompt1, prompt2)
-
 # ================= 7. 风格条件混合器（增强版）=================
 class FenggehunheFixed:
     @classmethod
     def INPUT_TYPES(cls):
-        style_list = list(DECOR_STYLES.keys()) + ["自定义"]
+        style_list = list(DECOR_STYLES.keys())  # 不再包含 "自定义"
         return {
             "required": {
                 "clip": ("CLIP",),
                 "通用提示词": ("STRING", {"multiline": True, "default": "", "placeholder": "输入通用提示词"}),
                 "风格1预设": (style_list, {"default": "现代简约"}),
-                "风格1自定义词": ("STRING", {"default": "", "placeholder": "自定义风格词（仅当上方选择'自定义'时生效）"}),
+                "风格1自定义词": ("STRING", {"default": "", "placeholder": "自定义风格词（非空时自动覆盖预设）"}),
                 "风格2预设": (style_list, {"default": "北欧风格"}),
-                "风格2自定义词": ("STRING", {"default": "", "placeholder": "自定义风格词（仅当上方选择'自定义'时生效）"}),
-                # 已删除 "加权拼合"
+                "风格2自定义词": ("STRING", {"default": "", "placeholder": "自定义风格词（非空时自动覆盖预设）"}),
                 "混合方式": (["线性插值", "加权拼接"], {"default": "线性插值"}),
                 "风格1强度": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "输出模式": (["混合条件", "风格1条件", "风格2条件"], {"default": "混合条件"}),
@@ -271,7 +270,8 @@ class FenggehunheFixed:
     CATEGORY = "Linuo/提示词混搭"
 
     def get_style_text(self, preset, custom_text):
-        if preset == "自定义":
+        # 优先使用自定义词（非空），否则使用预设描述
+        if custom_text.strip():
             return custom_text.strip()
         else:
             return DECOR_STYLES.get(preset, "")
@@ -291,7 +291,6 @@ class FenggehunheFixed:
             return [[result, {}]]
 
     def blend_conditionings(self, cond1, cond2, strength, mode):
-        # 已删除旧名称映射，直接使用 mode
         if not cond1 or not cond2:
             return cond1 or cond2
         out_cond = []
