@@ -259,6 +259,7 @@ class FenggehunheFixed:
                 "风格1自定义词": ("STRING", {"default": "", "placeholder": "自定义风格词（仅当上方选择'自定义'时生效）"}),
                 "风格2预设": (style_list, {"default": "北欧风格"}),
                 "风格2自定义词": ("STRING", {"default": "", "placeholder": "自定义风格词（仅当上方选择'自定义'时生效）"}),
+                # 已删除 "加权拼合"
                 "混合方式": (["线性插值", "加权拼接"], {"default": "线性插值"}),
                 "风格1强度": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "输出模式": (["混合条件", "风格1条件", "风格2条件"], {"default": "混合条件"}),
@@ -290,6 +291,7 @@ class FenggehunheFixed:
             return [[result, {}]]
 
     def blend_conditionings(self, cond1, cond2, strength, mode):
+        # 已删除旧名称映射，直接使用 mode
         if not cond1 or not cond2:
             return cond1 or cond2
         out_cond = []
@@ -342,7 +344,6 @@ class FenggehunheFixed:
         else:
             mixed_cond = self.blend_conditionings(cond1, cond2, 风格1强度, 混合方式)
             return (mixed_cond,)
-
 # ================= 8. 模型任意选择器（3输入可选）=================
 class ModelSelector:
     @classmethod
@@ -480,7 +481,8 @@ class LinuoTxt2ImgParams:
                 "采样预设": (["4步加速", "8步加速", "flux中质量", "flux高质量", "qwen中质量", "qwen高质量"], {"default": "flux中质量"}),
                 "自定义步数": ("INT", {"default": 20, "min": 1, "max": 100, "step": 1}),
                 "自定义CFG": ("FLOAT", {"default": 3.5, "min": 0.0, "max": 30.0, "step": 0.1}),
-                "尺寸预设": (["4:3_1024", "16:9_1024", "4:3_1600", "16:9_1600", "4:3_2024", "16:9_2024", "4:3_2500", "16:9_2500", "自定义"], {"default": "16:9_1024"}),
+                # 移除 "自定义" 选项
+                "尺寸预设": (["4:3_1024", "16:9_1024", "4:3_1600", "16:9_1600", "4:3_2024", "16:9_2024", "4:3_2500", "16:9_2500"], {"default": "16:9_1024"}),
                 "横竖屏切换": (["横屏", "竖屏"], {"default": "横屏"}),
                 "自定义宽度": ("INT", {"default": 1024, "min": 64, "max": 4096, "step": 8}),
                 "自定义高度": ("INT", {"default": 576, "min": 64, "max": 4096, "step": 8}),
@@ -493,38 +495,14 @@ class LinuoTxt2ImgParams:
     CATEGORY = "Linuo/参数整合"
 
     def process(self, 采样预设, 自定义步数, 自定义CFG, 尺寸预设, 横竖屏切换, 自定义宽度, 自定义高度, 批次数量):
-        # 生成 Latent（与原来相同）
-        if 尺寸预设 == "4:3_1024":
-            long_side, ratio = 1024, 4/3
-        elif 尺寸预设 == "16:9_1024":
-            long_side, ratio = 1024, 16/9
-        elif 尺寸预设 == "4:3_1600":
-            long_side, ratio = 1600, 4/3
-        elif 尺寸预设 == "16:9_1600":
-            long_side, ratio = 1600, 16/9
-        elif 尺寸预设 == "4:3_2024":
-            long_side, ratio = 2024, 4/3
-        elif 尺寸预设 == "16:9_2024":
-            long_side, ratio = 2024, 16/9
-        elif 尺寸预设 == "4:3_2500":
-            long_side, ratio = 2500, 4/3
-        elif 尺寸预设 == "16:9_2500":
-            long_side, ratio = 2500, 16/9
-        else:
-            width = 自定义宽度
-            height = 自定义高度
-            if 横竖屏切换 == "竖屏":
-                width, height = height, width
-            latent = torch.zeros([批次数量, 4, height // 8, width // 8])
-            steps = 自定义步数
-            cfg = 自定义CFG
-            return ({"samples": latent}, steps, cfg)
-        if 横竖屏切换 == "横屏":
-            width = long_side
-            height = int(long_side / ratio)
-        else:
-            height = long_side
-            width = int(long_side / ratio)
+        # 直接使用自定义宽高（已由前端预填充，用户可修改）
+        width = 自定义宽度
+        height = 自定义高度
+        # 如果横竖屏切换为竖屏，则交换宽高（这里保留用户输入，但通常前端填充时已考虑）
+        # 但为了逻辑清晰，我们仍按用户输入的宽高为准
+        if 横竖屏切换 == "竖屏":
+            width, height = height, width
+        # 确保是8的倍数
         width = (width // 8) * 8
         height = (height // 8) * 8
         latent = torch.zeros([批次数量, 4, height // 8, width // 8])
