@@ -4,6 +4,14 @@ import numpy as np
 from torch.nn import functional as F
 import comfy.utils
 
+# 尝试导入 Qwen 图像编辑节点（ComfyUI 内置）
+try:
+    from comfy_extras.nodes_qwen import QwenImageEditPlus
+    QWEN_AVAILABLE = True
+except ImportError:
+    QWEN_AVAILABLE = False
+    print("[Linuo插件] 警告：未找到 comfy_extras.nodes_qwen，Qwen 图像编辑功能将不可用")
+
 # ================= 1. 数值滑块节点 =================
 class Slider_0_1:
     @classmethod
@@ -66,35 +74,10 @@ class EmptyLatentPreset:
     FUNCTION = "generate"
     CATEGORY = "Linuo/图像尺寸"
     def generate(self, 预设, 横竖屏切换, 自定义宽度, 自定义高度, 批次数量):
-        if 预设 == "4:3_1024":
-            long_side, ratio = 1024, 4/3
-        elif 预设 == "16:9_1024":
-            long_side, ratio = 1024, 16/9
-        elif 预设 == "4:3_1600":
-            long_side, ratio = 1600, 4/3
-        elif 预设 == "16:9_1600":
-            long_side, ratio = 1600, 16/9
-        elif 预设 == "4:3_2024":
-            long_side, ratio = 2024, 4/3
-        elif 预设 == "16:9_2024":
-            long_side, ratio = 2024, 16/9
-        elif 预设 == "4:3_2500":
-            long_side, ratio = 2500, 4/3
-        elif 预设 == "16:9_2500":
-            long_side, ratio = 2500, 16/9
-        else:
-            width = 自定义宽度
-            height = 自定义高度
-            if 横竖屏切换 == "竖屏":
-                width, height = height, width
-            latent = torch.zeros([批次数量, 4, height // 8, width // 8])
-            return ({"samples": latent},)
-        if 横竖屏切换 == "横屏":
-            width = long_side
-            height = int(long_side / ratio)
-        else:
-            height = long_side
-            width = int(long_side / ratio)
+        # 直接使用输入框的值作为最终宽高，不再做任何交换
+        width = 自定义宽度
+        height = 自定义高度
+        # 确保为8的倍数（输入框本身已由前端联动保证，但以防万一）
         width = (width // 8) * 8
         height = (height // 8) * 8
         latent = torch.zeros([批次数量, 4, height // 8, width // 8])
@@ -196,6 +179,7 @@ class SamplingParamsPreset:
     def get_params(self, 预设, 自定义步数, 自定义CFG):
         # 直接返回输入框中的值
         return (自定义步数, 自定义CFG)
+
 # ================= 5. 装饰风格词库 =================
 DECOR_STYLES = {
     "现代简约": "现代简约：以黑白灰为主色调，采用几何造型与极简线条设计。家具选用金属玻璃材质，灯具采用无主灯设计，配饰注重隐藏式收纳与智能家居。墙面使用纯色乳胶漆，地面铺装灰色地砖或深色木地板，整体呈现理性整洁、具有科技感的现代空间。",
@@ -216,9 +200,13 @@ DECOR_STYLES = {
 
 # ================= 6. 风格文本生成器 =================
 class StyleTextGenerator:
+    # 内置默认文本
+    强控制内置 = "使用图2风格参考图中元素按照图1的结构来设计，添加真实的材质，整体画面颜色按照图2，修正图1弯曲的线条。"
+    强发散内置 = "发散设计：使用图2参考图内容一样的贴合到图1的结构中，不改变图2的细节特征，生成的环境和光影色调保持与图2相似。"
+
     @classmethod
     def INPUT_TYPES(cls):
-        style_list = list(DECOR_STYLES.keys())  # 不再包含 "自定义"
+        style_list = list(DECOR_STYLES.keys())  # 不含“自定义”，因为自定义已独立
         return {
             "required": {
                 "通用提示词": ("STRING", {"multiline": True, "default": "", "placeholder": "输入通用提示词"}),
@@ -226,26 +214,36 @@ class StyleTextGenerator:
                 "风格1自定义词": ("STRING", {"default": "", "placeholder": "自定义风格词（非空时自动覆盖预设）"}),
                 "风格2预设": (style_list, {"default": "北欧风格"}),
                 "风格2自定义词": ("STRING", {"default": "", "placeholder": "自定义风格词（非空时自动覆盖预设）"}),
+                "强控制自定义词": ("STRING", {"multiline": True, "default": "", "placeholder": "强控制提示词（留空则使用内置默认）"}),
+                "强发散自定义词": ("STRING", {"multiline": True, "default": "", "placeholder": "强发散提示词（留空则使用内置默认）"}),
             }
         }
-    RETURN_TYPES = ("STRING", "STRING")
-    RETURN_NAMES = ("风格1完整提示词", "风格2完整提示词")
+    RETURN_TYPES = ("STRING", "STRING", "STRING", "STRING")
+    RETURN_NAMES = ("风格1完整提示词", "风格2完整提示词", "强控制完整提示词", "强发散完整提示词")
     FUNCTION = "generate_texts"
     CATEGORY = "Linuo/提示词混搭"
 
     def get_style_text(self, preset, custom_text):
-        # 优先使用自定义词（非空），否则使用预设描述
         if custom_text.strip():
             return custom_text.strip()
         else:
             return DECOR_STYLES.get(preset, "")
 
-    def generate_texts(self, 通用提示词, 风格1预设, 风格1自定义词, 风格2预设, 风格2自定义词):
+    def generate_texts(self, 通用提示词, 风格1预设, 风格1自定义词, 风格2预设, 风格2自定义词,
+                       强控制自定义词, 强发散自定义词):
+        # 风格1、风格2的处理（保持原逻辑）
         style1_text = self.get_style_text(风格1预设, 风格1自定义词)
         style2_text = self.get_style_text(风格2预设, 风格2自定义词)
         prompt1 = f"{通用提示词}, {style1_text}" if style1_text else 通用提示词
         prompt2 = f"{通用提示词}, {style2_text}" if style2_text else 通用提示词
-        return (prompt1, prompt2)
+
+        # 强控制、强发散的处理
+        强控制文本 = 强控制自定义词.strip() if 强控制自定义词.strip() else self.强控制内置
+        强发散文本 = 强发散自定义词.strip() if 强发散自定义词.strip() else self.强发散内置
+        prompt_control = f"{通用提示词}, {强控制文本}" if 强控制文本 else 通用提示词
+        prompt_diverge = f"{通用提示词}, {强发散文本}" if 强发散文本 else 通用提示词
+
+        return (prompt1, prompt2, prompt_control, prompt_diverge)
 # ================= 7. 风格条件混合器（增强版）=================
 class FenggehunheFixed:
     @classmethod
@@ -253,7 +251,6 @@ class FenggehunheFixed:
         style_list = list(DECOR_STYLES.keys())  # 不再包含 "自定义"
         return {
             "required": {
-                "clip": ("CLIP",),
                 "通用提示词": ("STRING", {"multiline": True, "default": "", "placeholder": "输入通用提示词"}),
                 "风格1预设": (style_list, {"default": "现代简约"}),
                 "风格1自定义词": ("STRING", {"default": "", "placeholder": "自定义风格词（非空时自动覆盖预设）"}),
@@ -262,6 +259,9 @@ class FenggehunheFixed:
                 "混合方式": (["线性插值", "加权拼接"], {"default": "线性插值"}),
                 "风格1强度": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "输出模式": (["混合条件", "风格1条件", "风格2条件"], {"default": "混合条件"}),
+            },
+            "optional": {
+                "clip": ("CLIP",),
             }
         }
     RETURN_TYPES = ("CONDITIONING",)
@@ -270,7 +270,6 @@ class FenggehunheFixed:
     CATEGORY = "Linuo/提示词混搭"
 
     def get_style_text(self, preset, custom_text):
-        # 优先使用自定义词（非空），否则使用预设描述
         if custom_text.strip():
             return custom_text.strip()
         else:
@@ -278,7 +277,7 @@ class FenggehunheFixed:
 
     def encode_prompt_fixed(self, clip, prompt):
         if clip is None:
-            raise ValueError("CLIP模型输入不能为空")
+            return []   # 无 CLIP 时返回空条件
         tokens = clip.tokenize(prompt)
         result = clip.encode_from_tokens(tokens, return_pooled=True)
         if len(result) == 2:
@@ -299,7 +298,6 @@ class FenggehunheFixed:
             t2, d2 = c2
             len1 = t1.shape[1]
             len2 = t2.shape[1]
-
             if mode == "线性插值":
                 if len1 != len2:
                     min_len = min(len1, len2)
@@ -327,7 +325,8 @@ class FenggehunheFixed:
             out_cond.append([blended_t, blended_dict])
         return out_cond
 
-    def mix_styles(self, clip, 通用提示词, 风格1预设, 风格1自定义词, 风格2预设, 风格2自定义词, 混合方式, 风格1强度, 输出模式):
+    def mix_styles(self, 通用提示词, 风格1预设, 风格1自定义词, 风格2预设, 风格2自定义词,
+                   混合方式, 风格1强度, 输出模式, clip=None):
         style1_text = self.get_style_text(风格1预设, 风格1自定义词)
         style2_text = self.get_style_text(风格2预设, 风格2自定义词)
         prompt1 = f"{通用提示词}, {style1_text}" if style1_text else 通用提示词
@@ -432,7 +431,44 @@ class GenericSelector4:
             return (输入3,)
         else:
             return (输入4,)
+# ================= 11. Linuo图生图参数（移除"vae输入和latent输出"预设）=================
+class LinuoImg2ImgParamsSimple:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "图像": ("IMAGE",),
+                "长边数值": ("INT", {"default": 1024, "min": 64, "max": 4096, "step": 8}),
+                "采样预设": (["4步加速", "8步加速", "flux中质量", "flux高质量", "qwen中质量", "qwen高质量"], {"default": "flux中质量"}),
+                "自定义步数": ("INT", {"default": 20, "min": 1, "max": 100, "step": 1}),
+                "自定义CFG": ("FLOAT", {"default": 3.5, "min": 0.0, "max": 30.0, "step": 0.1}),
+            }
+        }
+    RETURN_TYPES = ("IMAGE", "INT", "FLOAT")
+    RETURN_NAMES = ("缩放后图像", "steps", "cfg")
+    FUNCTION = "process"
+    CATEGORY = "Linuo/参数整合"
 
+    def process(self, 图像, 长边数值, 采样预设, 自定义步数, 自定义CFG):
+        # 等比缩放图像到指定长边
+        original_h, original_w = 图像.shape[1], 图像.shape[2]
+        if original_h >= original_w:
+            new_h = 长边数值
+            new_w = int(original_w * (长边数值 / original_h))
+        else:
+            new_w = 长边数值
+            new_h = int(original_h * (长边数值 / original_w))
+        # 确保为 8 的倍数
+        new_w = (new_w // 8) * 8
+        new_h = (new_h // 8) * 8
+        img = 图像.permute(0, 3, 1, 2)
+        img_resized = F.interpolate(img, size=(new_h, new_w), mode="bilinear", antialias=True)
+        img_resized = img_resized.permute(0, 2, 3, 1)
+
+        # 直接输出自定义的步数和 CFG（预设仅用于前端填充，不影响输出）
+        steps = 自定义步数
+        cfg = 自定义CFG
+        return (img_resized, steps, cfg)
 # ================= 11. Linuo图生图参数（移除"自定义"预设）=================
 class LinuoImg2ImgParams:
     @classmethod
@@ -453,7 +489,6 @@ class LinuoImg2ImgParams:
     CATEGORY = "Linuo/参数整合"
 
     def process(self, 图像, vae, 长边数值, 采样预设, 自定义步数, 自定义CFG):
-        # 缩放图像
         original_h, original_w = 图像.shape[1], 图像.shape[2]
         if original_h >= original_w:
             new_h = 长边数值
@@ -467,10 +502,10 @@ class LinuoImg2ImgParams:
         img_resized = F.interpolate(img, size=(new_h, new_w), mode="bilinear", antialias=True)
         img_resized = img_resized.permute(0, 2, 3, 1)
         latent = vae.encode(img_resized[:, :, :, :3])
-        # 直接使用输入框的值
         steps = 自定义步数
         cfg = 自定义CFG
         return ({"samples": latent}, steps, cfg, img_resized)
+
 # ================= 12. Linuo文生图参数（移除"自定义"预设）=================
 class LinuoTxt2ImgParams:
     @classmethod
@@ -480,7 +515,6 @@ class LinuoTxt2ImgParams:
                 "采样预设": (["4步加速", "8步加速", "flux中质量", "flux高质量", "qwen中质量", "qwen高质量"], {"default": "flux中质量"}),
                 "自定义步数": ("INT", {"default": 20, "min": 1, "max": 100, "step": 1}),
                 "自定义CFG": ("FLOAT", {"default": 3.5, "min": 0.0, "max": 30.0, "step": 0.1}),
-                # 移除 "自定义" 选项
                 "尺寸预设": (["4:3_1024", "16:9_1024", "4:3_1600", "16:9_1600", "4:3_2024", "16:9_2024", "4:3_2500", "16:9_2500"], {"default": "16:9_1024"}),
                 "横竖屏切换": (["横屏", "竖屏"], {"default": "横屏"}),
                 "自定义宽度": ("INT", {"default": 1024, "min": 64, "max": 4096, "step": 8}),
@@ -494,63 +528,37 @@ class LinuoTxt2ImgParams:
     CATEGORY = "Linuo/参数整合"
 
     def process(self, 采样预设, 自定义步数, 自定义CFG, 尺寸预设, 横竖屏切换, 自定义宽度, 自定义高度, 批次数量):
-        # 直接使用自定义宽高（已由前端预填充，用户可修改）
+        # 直接使用输入框的宽高，不再交换
         width = 自定义宽度
         height = 自定义高度
-        # 如果横竖屏切换为竖屏，则交换宽高（这里保留用户输入，但通常前端填充时已考虑）
-        # 但为了逻辑清晰，我们仍按用户输入的宽高为准
-        if 横竖屏切换 == "竖屏":
-            width, height = height, width
-        # 确保是8的倍数
         width = (width // 8) * 8
         height = (height // 8) * 8
         latent = torch.zeros([批次数量, 4, height // 8, width // 8])
         steps = 自定义步数
         cfg = 自定义CFG
         return ({"samples": latent}, steps, cfg)
-# ================= 13. Linuo控制发散混合出图设置 =================
+
+# ================= 13. Linuo控制发散混合出图设置（集成 Qwen 图像编辑）=================
 class LinuoControlFusion:
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "clip": ("CLIP",),
-                "vae": ("VAE",),
-                "线稿处理图": ("IMAGE",),
-                "深度控制图": ("IMAGE",),
-                "线稿图强度": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "控制与发散分界点": ("FLOAT", {"default": 0.6, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "通用提示词": ("STRING", {"multiline": True, "default": "", "placeholder": "通用描述"}),
-                "强控制提示词": ("STRING", {"multiline": True, "default": "", "placeholder": "强控制提示词"}),
-                "发散提示词": ("STRING", {"multiline": True, "default": "", "placeholder": "发散提示词"}),
-                "参考图2": ("IMAGE",),
-                "参考图3": ("IMAGE",),
-                "输出模式": (["先控制再发散", "先发散再控制", "纯强控制条件"], {"default": "先控制再发散"}),
+                "分界点": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "模式": (["强控优先", "发散优先"], {"default": "强控优先"}),
+            },
+            "optional": {
+                "强控条件": ("CONDITIONING",),
+                "发散条件": ("CONDITIONING",),
             }
         }
-    RETURN_TYPES = ("IMAGE", "CONDITIONING")
-    RETURN_NAMES = ("强控制图像", "CONDITIONING")
+
+    RETURN_TYPES = ("CONDITIONING",)
+    RETURN_NAMES = ("混合条件",)
     FUNCTION = "process"
-    CATEGORY = "Linuo/参数整合"
+    CATEGORY = "Linuo/条件混合"
 
-    def blend_images(self, img1, img2, factor):
-        return img1 * factor + img2 * (1.0 - factor)
-
-    def encode_prompt(self, clip, prompt):
-        if clip is None:
-            raise ValueError("clip不能为空")
-        tokens = clip.tokenize(prompt)
-        result = clip.encode_from_tokens(tokens, return_pooled=True)
-        if len(result) == 2:
-            cond, pooled = result
-            if pooled is not None:
-                return [[cond, {"pooled_output": pooled}]]
-            else:
-                return [[cond, {}]]
-        else:
-            return [[result, {}]]
-
-    def apply_timestep_range(self, cond, start=None, end=None):
+    def set_timestep_range(self, cond, start=None, end=None):
         if cond is None:
             return None
         new_cond = []
@@ -564,37 +572,18 @@ class LinuoControlFusion:
             new_cond.append([t, new_d])
         return new_cond
 
-    def combine_conditionings(self, cond1, cond2):
-        if cond1 is None:
-            return cond2
-        if cond2 is None:
-            return cond1
-        return cond1 + cond2
-
-    def process(self, clip, vae, 线稿处理图, 深度控制图, 线稿图强度, 控制与发散分界点,
-                通用提示词, 强控制提示词, 发散提示词, 参考图2, 参考图3, 输出模式):
-        control_img = self.blend_images(线稿处理图, 深度控制图, 线稿图强度)
-        control_prompt = f"{通用提示词}, {强控制提示词}" if 强控制提示词 else 通用提示词
-        diverge_prompt = f"{通用提示词}, {发散提示词}" if 发散提示词 else 通用提示词
-        cond_control = self.encode_prompt(clip, control_prompt)
-        cond_diverge = self.encode_prompt(clip, diverge_prompt)
-
-        cond_control_range1 = self.apply_timestep_range(cond_control, end=控制与发散分界点)
-        cond_diverge_range1 = self.apply_timestep_range(cond_diverge, start=控制与发散分界点)
-        mixed_cond1 = self.combine_conditionings(cond_control_range1, cond_diverge_range1)
-
-        cond_control_range2 = self.apply_timestep_range(cond_control, start=控制与发散分界点)
-        cond_diverge_range2 = self.apply_timestep_range(cond_diverge, end=控制与发散分界点)
-        mixed_cond2 = self.combine_conditionings(cond_control_range2, cond_diverge_range2)
-
-        if 输出模式 == "先控制再发散":
-            final_cond = mixed_cond1
-        elif 输出模式 == "先发散再控制":
-            final_cond = mixed_cond2
-        else:
-            final_cond = cond_control
-        return (control_img, final_cond)
-
+    def process(self, 分界点, 模式, 强控条件=None, 发散条件=None):
+        if 强控条件 is None or 发散条件 is None:
+            return ([],)  # 返回空条件
+        if 模式 == "强控优先":
+            cond_control_range = self.set_timestep_range(强控条件, end=分界点)
+            cond_diverge_range = self.set_timestep_range(发散条件, start=分界点)
+            mixed_cond = cond_control_range + cond_diverge_range
+        else:  # 发散优先
+            cond_diverge_range = self.set_timestep_range(发散条件, end=分界点)
+            cond_control_range = self.set_timestep_range(强控条件, start=分界点)
+            mixed_cond = cond_diverge_range + cond_control_range
+        return (mixed_cond,)
 # ================= 节点注册 =================
 NODE_CLASS_MAPPINGS = {
     "Slider_0_1": Slider_0_1,
@@ -605,13 +594,14 @@ NODE_CLASS_MAPPINGS = {
     "ImageMaskScaleByLongSide": ImageMaskScaleByLongSide,
     "SamplingParamsPreset": SamplingParamsPreset,
     "StyleTextGenerator": StyleTextGenerator,
-    "风格条件混合器 (修复版)": FenggehunheFixed,
+    "风格条件混合器 ": FenggehunheFixed,
     "ModelSelector": ModelSelector,
     "ConditioningSelector": ConditioningSelector,
     "GenericSelector4": GenericSelector4,
-    "Linuo图生图参数": LinuoImg2ImgParams,
+    "Linuo图生图参数（整合缩放+编码+参数）": LinuoImg2ImgParams,
+    "Linuo图生图参数（无编码）": LinuoImg2ImgParamsSimple,
     "Linuo文生图参数": LinuoTxt2ImgParams,
-    "Linuo控制发散混合出图设置": LinuoControlFusion,
+    "Linuo控制发散混合出图设置": LinuoControlFusion, 
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -623,13 +613,14 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ImageMaskScaleByLongSide": "Linuo图像+遮罩按长边缩放 (可填充漏洞)",
     "SamplingParamsPreset": "Linuo出图参数预设 (步数/CFG)",
     "StyleTextGenerator": "Linuo风格文本生成器 (仅文本)",
-    "风格条件混合器 (修复版)": "Linuo风格条件混合器 (增强版)",
+    "风格条件混合器 ": "Linuo风格条件混合器 (增强版)",
     "ModelSelector": "Linuo模型任意选择器 (3输入可选)",
     "ConditioningSelector": "Linuo条件任意选择器 (3输入可选)",
     "GenericSelector4": "Linuo通用任意选择器 (4输入可选)",
-    "Linuo图生图参数": "Linuo图生图参数 (整合缩放+编码+参数)",
+    "Linuo图生图参数（整合缩放+编码+参数）": "Linuo图生图参数 (整合缩放+编码+参数)",
+    "Linuo图生图参数（无编码）": "Linuo图生图参数 (无编码)",
     "Linuo文生图参数": "Linuo文生图参数 (整合尺寸+参数)",
-    "Linuo控制发散混合出图设置": "Linuo控制发散混合出图设置 (含输出模式选择)",
+    "Linuo控制发散混合出图设置": "Linuo条件时序混合器",
 }
 
 WEB_DIRECTORY = "./web"

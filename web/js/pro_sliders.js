@@ -39,7 +39,6 @@ app.registerExtension({
                         const preset = presetWidget.value;
                         const data = STEPS_PRESET_MAP[preset];
                         if (!data) return;
-                        // 更新步数
                         if (stepsWidget.value !== data.steps) {
                             stepsWidget.value = data.steps;
                             if (stepsWidget.inputEl) {
@@ -48,7 +47,6 @@ app.registerExtension({
                             }
                             if (stepsWidget.callback) stepsWidget.callback(data.steps);
                         }
-                        // 更新 CFG
                         if (cfgWidget.value !== data.cfg) {
                             cfgWidget.value = data.cfg;
                             if (cfgWidget.inputEl) {
@@ -66,29 +64,46 @@ app.registerExtension({
                     setTimeout(updateSteps, 100);
                 }
 
-                // ----- 尺寸预设联动（仅针对 LinuoTxt2ImgParams 节点） -----
-                const sizePresetWidget = this.widgets?.find(w => w.name === "尺寸预设");
+                // ----- 尺寸预设联动（支持“尺寸预设”或“预设”，但需存在横竖屏和宽高） -----
+                const sizePresetWidget = this.widgets?.find(w => w.name === "尺寸预设" || w.name === "预设");
                 const orientationWidget = this.widgets?.find(w => w.name === "横竖屏切换");
                 const widthWidget = this.widgets?.find(w => w.name === "自定义宽度");
                 const heightWidget = this.widgets?.find(w => w.name === "自定义高度");
                 if (sizePresetWidget && orientationWidget && widthWidget && heightWidget) {
                     console.log(`PresetSync: 绑定尺寸预设 (节点 ${this.type})`);
+                    
+                    // 统一的尺寸更新函数
                     const updateSize = () => {
                         const preset = sizePresetWidget.value;
-                        const data = SIZE_PRESET_MAP[preset];
-                        if (!data) return;
                         const orientation = orientationWidget.value;
                         let w, h;
-                        if (orientation === "横屏") {
-                            w = data.longSide;
-                            h = Math.round(data.longSide / data.ratio);
+
+                        // 如果预设是 "自定义"，则直接交换当前宽高
+                        if (preset === "自定义") {
+                            w = widthWidget.value;
+                            h = heightWidget.value;
+                            if (orientation === "竖屏") {
+                                // 交换宽高
+                                [w, h] = [h, w];
+                            }
+                            // 不进行8的倍数对齐，保留用户输入
                         } else {
-                            h = data.longSide;
-                            w = Math.round(data.longSide / data.ratio);
+                            // 非自定义，根据预设映射计算
+                            const data = SIZE_PRESET_MAP[preset];
+                            if (!data) return;
+                            if (orientation === "横屏") {
+                                w = data.longSide;
+                                h = Math.round(data.longSide / data.ratio);
+                            } else {
+                                h = data.longSide;
+                                w = Math.round(data.longSide / data.ratio);
+                            }
+                            // 对齐到8的倍数
+                            w = Math.round(w / 8) * 8;
+                            h = Math.round(h / 8) * 8;
                         }
-                        // 确保8的倍数
-                        w = Math.round(w / 8) * 8;
-                        h = Math.round(h / 8) * 8;
+
+                        // 更新宽度
                         if (widthWidget.value !== w) {
                             widthWidget.value = w;
                             if (widthWidget.inputEl) {
@@ -97,6 +112,7 @@ app.registerExtension({
                             }
                             if (widthWidget.callback) widthWidget.callback(w);
                         }
+                        // 更新高度
                         if (heightWidget.value !== h) {
                             heightWidget.value = h;
                             if (heightWidget.inputEl) {
@@ -106,18 +122,21 @@ app.registerExtension({
                             if (heightWidget.callback) heightWidget.callback(h);
                         }
                     };
+
                     // 监听尺寸预设变化
                     const origSizeCallback = sizePresetWidget.callback;
                     sizePresetWidget.callback = function(value) {
                         if (origSizeCallback) origSizeCallback.call(this, value);
                         updateSize();
                     };
+
                     // 监听横竖屏切换变化
                     const origOriCallback = orientationWidget.callback;
                     orientationWidget.callback = function(value) {
                         if (origOriCallback) origOriCallback.call(this, value);
                         updateSize();
                     };
+
                     setTimeout(updateSize, 100);
                 }
             }, 200);
